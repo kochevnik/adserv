@@ -1,22 +1,14 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
+#include <unistd.h>
 #include <sys/queue.h>
 #include <evhttp.h>
 #include <libmemcached/memcached.h>
 
 #include <adserv.h>
 #include <adserv_db.h>
-
-typedef struct {
-	char* host;
-	int port;
-} cache_serv_descr_t;
-
-static cache_serv_descr_t caches[] = {
-	{ "localhost", 11211 },
-	{ NULL }
-};
+#include <adserv_cfg.h>
 
 memcached_st *cache_client;
 
@@ -169,37 +161,119 @@ static void handler(struct evhttp_request *req, void *arg)
 	free(reply);
 }
 
+#define DEFAULT_CONFIG "/etc/adserv.conf"
+#define OPTSTRING "c:hid:"
+
+static void usage(const char *arg)
+{
+	printf("Usage: %s [options]\n"
+		"Options are:\n"
+		" -c <config>\n\tPath to the main config file, default is '%s'\n"
+		" -h\n\tPrint this help and exit\n"
+		" -i\n\tDo not become daemon\n"
+		" -d <debug_options>\n\tParameters for debug output\n"
+		, arg, DEFAULT_CONFIG);
+}
+
 int main(int argc, char **argv)
 {
-	if (argc != 3) {
-		fprintf(stderr, "usage: %s bind_address bind_port\n", argv[0]);
-		exit(EXIT_FAILURE);
+	int opt, exit_status = EXIT_FAILURE;
+	char *config = NULL;
+	unsigned daemonize = 1;
+	char *debug_str = NULL;
+
+	while ((opt = getopt(argc, argv, OPTSTRING)) != -1) {
+		switch (opt) {
+		case 'c':
+			config = strdup(optarg);
+			break;
+		case 'h':
+			usage(argv[0]);
+			exit(EXIT_SUCCESS);
+			break;
+		case 'i':
+			daemonize = 0;
+			break;
+		case 'd':
+			debug_str = strdup(optarg);
+			break;
+		default:
+			fprintf(stderr, "unknown option '%c'\n", opt);
+			usage(argv[0]);
+			exit(EXIT_FAILURE);
+		}
 	}
 
-	if (adserv_db_connect(CONNINFO) != ADSERV_OK)
+	if (!config)
+		config = strdup(DEFAULT_CONFIG);
+	dbg("Use config '%s'\n", config);
+	if (adserv_cfg_load(config)) {
+		log("adserv_cfg_load('%s') failed\n", config);
+		free(config);
 		exit(EXIT_FAILURE);
+	}
+	free(config);
+	config = NULL;
+
+	//if (daemonize)
+	//	daemon(0, 0);
+
+	cfg_req_t req;
+	req.key = "db_conn_info";
+	if (adserv_cfg_get(&req) != ADSERV_OK)
+		goto out_cfg;
+	if (adserv_db_connect(req.value) != ADSERV_OK)
+		goto out_cfg;
 
 	cache_client = memcached_create(NULL);
 	if (!cache_client) {
 		log("memcached_create() failed\n");
+		goto out_db;
+	}
+
+	req.key = "memcached_host";
+	if (adserv_cfg_get(&req) != ADSERV_OK)
+		goto out_db;
+	const char *memcached_host = req.value;
+
+	req.key = "memcached_port";
+	if (adserv_cfg_get(&req) != ADSERV_OK)
+		goto out_db;
+	unsigned memcached_port = atoi(req.value);
+
+	if (memcached_server_add(cache_client, memcached_host, memcached_port) != MEMCACHED_SUCCESS) {
+		log("unable to connect to memcached at %s:%u\n", memcached_host, memcached_port);
+		goto out_db;
+	}
+
+	req.key = "listen_address";
+	if (adserv_cfg_get(&req) != ADSERV_OK)
+		goto out_db;
+	const char *listen_address = req.value;
+
+	req.key = "listen_port";
+	if (adserv_cfg_get(&req) != ADSERV_OK)
+		goto out_db;
+	unsigned listen_port = atoi(req.value);
+
+	event_init();
+	struct evhttp *httpd = evhttp_start(listen_address, listen_port);
+	if (!httpd) {
+		log("evhttp_start() failed\n");
 		adserv_db_close();
 		exit(EXIT_FAILURE);
 	}
-	cache_serv_descr_t *itr = &caches[0];
-	while (itr->host) {
-		memcached_server_add(cache_client, itr->host, itr->port);
-		++itr;
-	}
-
-	event_init();
-	struct evhttp *httpd = evhttp_start(argv[1], atoi(argv[2]));
 
 	evhttp_set_gencb(httpd, handler, NULL);
 
 	event_dispatch();
 
 	evhttp_free(httpd);
+	exit_status = EXIT_SUCCESS;
+out_db:
 	adserv_db_close();
-	return 0;
+out_cfg:
+	adserv_cfg_free();
+	exit(exit_status);
 }
 

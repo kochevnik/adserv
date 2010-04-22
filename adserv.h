@@ -8,8 +8,6 @@
 #define log(format, ...) do {printf("%s() ", __FUNCTION__); printf(format, ## __VA_ARGS__); } while (0)
 #define dbg(format, ...) do {printf("%s() ", __FUNCTION__); printf(format, ## __VA_ARGS__); } while (0)
 
-#define CONNINFO "dbname=adserv_db user=adserv_user"
-
 typedef struct {
 	size_t size;
 	char *data;
