@@ -21,7 +21,7 @@ int adserv_db_connect(const char *conninfo)
 
 	conn = PQconnectdb(conninfo);
 	if (PQstatus(conn) != CONNECTION_OK) {
-		log("Connection to database failed: %s", PQerrorMessage(conn));
+		log("Connection to database failed: %s\n", PQerrorMessage(conn));
 		reset_conn();
 		return ADSERV_ERROR;
 	}
@@ -85,7 +85,7 @@ unsigned char* adserv_db_get_template(adserv_params_t *params, size_t *length)
 	buf_size = sizeof(GET_TEMPLATE_QUERY) + escaped_place_id_length + escaped_inst_id_length + escaped_iframe_length;
 	buf = malloc(buf_size);
 	if (!buf) {
-		log("unable to allocate memory");
+		log("unable to allocate memory\n");
 		free(escaped_place_id);
 		free(escaped_inst_id);
 		free(escaped_iframe);
@@ -99,14 +99,14 @@ unsigned char* adserv_db_get_template(adserv_params_t *params, size_t *length)
 	res = PQexec(conn, buf);
 	free(buf);
 	if (PQresultStatus(res) != PGRES_TUPLES_OK) {
-		log("database error");
+		log("database error\n");
 		PQclear(res);
 		return NULL;
 	}
 	int fields_num = PQnfields(res);
 	int tuples_num = PQntuples(res);
 	if ((1 != fields_num) || (1 != tuples_num)) {
-		log("unexpected db response");
+		log("unexpected db response\n");
 		PQclear(res);
 		return NULL;
 	}
@@ -146,7 +146,7 @@ unsigned char* adserv_db_get_banner(adserv_params_t *params, size_t *length)
 	buf_size = sizeof(GET_BANNER_QUERY) + escaped_place_id_length + escaped_banner_id_length;
 	buf = malloc(buf_size);
 	if (!buf) {
-		log("unable to allocate memory");
+		log("unable to allocate memory\n");
 		free(escaped_place_id);
 		free(escaped_banner_id);
 		return NULL;
@@ -158,14 +158,14 @@ unsigned char* adserv_db_get_banner(adserv_params_t *params, size_t *length)
 	res = PQexec(conn, buf);
 	free(buf);
 	if (PQresultStatus(res) != PGRES_TUPLES_OK) {
-		log("database error");
+		log("database error\n");
 		PQclear(res);
 		return NULL;
 	}
 	int fields_num = PQnfields(res);
 	int tuples_num = PQntuples(res);
 	if ((1 != fields_num) || (1 != tuples_num)) {
-		log("unexpected db response");
+		log("unexpected db response\n");
 		PQclear(res);
 		return NULL;
 	}

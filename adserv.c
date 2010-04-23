@@ -256,7 +256,6 @@ int main(int argc, char **argv)
 	unsigned listen_port = atoi(req.value);
 
 	event_init();
-	dbg("listen_address = '%s', listen_port = %u\n", listen_address, listen_port);
 	struct evhttp *httpd = evhttp_start(listen_address, listen_port);
 	if (!httpd) {
 		log("evhttp_start() failed: %s\n", strerror(errno));
