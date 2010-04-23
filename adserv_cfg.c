@@ -30,7 +30,7 @@ void adserv_cfg_free(void)
 
 int adserv_cfg_load(char *path)
 {
-	GError *err = NULL;
+	dbg("using config '%s'\n", path);
 
 	if (cfg_file || server_config)
 		adserv_cfg_free();
@@ -48,6 +48,7 @@ int adserv_cfg_load(char *path)
 		return ADSERV_ERROR;
 	}
 
+	GError *err = NULL;
 	if (!g_key_file_load_from_file(server_config, cfg_file, G_KEY_FILE_KEEP_COMMENTS | G_KEY_FILE_KEEP_TRANSLATIONS, &err)) {
 		log("Could not read configuration file '%s': %s\n", cfg_file, err->message);
 		g_error_free(err);

@@ -1,5 +1,6 @@
 #include <stdlib.h>
 #include <stdio.h>
+#include <errno.h>
 #include <string.h>
 #include <unistd.h>
 #include <sys/queue.h>
@@ -206,9 +207,7 @@ int main(int argc, char **argv)
 
 	if (!config)
 		config = strdup(DEFAULT_CONFIG);
-	dbg("Use config '%s'\n", config);
 	if (adserv_cfg_load(config)) {
-		log("adserv_cfg_load('%s') failed\n", config);
 		free(config);
 		exit(EXIT_FAILURE);
 	}
@@ -257,9 +256,10 @@ int main(int argc, char **argv)
 	unsigned listen_port = atoi(req.value);
 
 	event_init();
+	dbg("listen_address = '%s', listen_port = %u\n", listen_address, listen_port);
 	struct evhttp *httpd = evhttp_start(listen_address, listen_port);
 	if (!httpd) {
-		log("evhttp_start() failed\n");
+		log("evhttp_start() failed: %s\n", strerror(errno));
 		adserv_db_close();
 		exit(EXIT_FAILURE);
 	}
