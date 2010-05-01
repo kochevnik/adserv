@@ -27,4 +27,14 @@ typedef struct {
 
 #define adserv_params_offset(field) (offset_of(adserv_params_t, field))
 
+#define CONTENT_TYPE_IMAGE	0
+#define CONTENT_TYPE_FLASH	1
+
+#define EVENT_TYPE_GET_TEMPLATE	2
+#define EVENT_TYPE_GET_REDIRECT	3
+#define EVENT_TYPE_GET_FILE	4
+
+#define LINK_OPEN_TYPE_BLANK	0
+#define LINK_OPEN_TYPE_SELF	1
+
 #endif // ADSERV_H

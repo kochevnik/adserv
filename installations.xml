@@ -1,0 +1,5 @@
+<?xml version="1.0"?>
+<installations>
+    <installation globalId="1" localId="1" templateUrl="http://www.openadstore.com/oas/sv" clickUrl="http://www.openadstore.com/oas/sv" fileUrl="http://www.openadstore.com/oas/sv" />
+    <installation globalId="2" localId="2" templateUrl="http://www.openadstore.com/oas/sv" clickUrl="http://www.openadstore.com/oas/sv" fileUrl="http://www.openadstore.com/oas/sv" />
+</installations>

@@ -39,7 +39,7 @@ def put_banner(cursor, options):
 	cursor.execute("INSERT INTO banners (place_id, banner_id, banner) VALUES (%s, %s, %s);", (options.place_id, options.banner_id, psycopg2.Binary(banner)))
 
 
-def main(argv=sys.argv):
+def main():
 	parser = OptionParser()
 	parser.add_option("-c", "--cmd", dest="cmd", help="command (get_template | put_template | get_banner | put_banner)")
 	parser.add_option("-f", "--file", dest="file", help="file to use", metavar="FILE")

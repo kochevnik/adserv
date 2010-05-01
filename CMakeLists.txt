@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 2.6)
 project(ADSERV C)
 set(PACKAGE "adserv")
 set(VERSION "0.1")
-set(SYSCONF_INSTALL_DIR etc CACHE STRING "Install location for configuration files.")
+set(SYSCONF_INSTALL_DIR etc/adserv CACHE STRING "Install location for configuration files.")
 set(BIN_INSTALL_DIR bin CACHE STRING "Install location for binaries.")
 set(CMAKE_C_FLAGS "-Wall ${CMAKE_C_FLAGS}")
 
@@ -133,6 +133,37 @@ include_directories(${GLIB2_INCLUDE_DIR})
 
 
 
+#
+# take care of libxml2 includes
+#
+if (WITH_LIBXML2_INCLUDE)
+	find_path(LIBXML2_INCLUDE_DIR "libxml/parser.h" PATHS ${WITH_LIBXML2_INCLUDE} NO_DEFAULT_PATH)
+else (WITH_LIBXML2_INCLUDE)
+	find_path(LIBXML2_INCLUDE_DIR "libxml/parser.h")
+endif (WITH_LIBXML2_INCLUDE)
+if (NOT LIBXML2_INCLUDE_DIR)
+	message(FATAL_ERROR "Unable to find libxml2 include files!")
+endif (NOT LIBXML2_INCLUDE_DIR)
+message(STATUS "LIBXML2_INCLUDE_DIR = '${LIBXML2_INCLUDE_DIR}'")
+include_directories(${LIBXML2_INCLUDE_DIR})
+#
+# ...and libs
+#
+foreach(_LIB xml2)
+	if (WITH_LIBXML2_LIB)
+		find_library(${_LIB}_FOUND ${_LIB} PATHS ${WITH_LIBXML2_LIB} NO_DEFAULT_PATH)
+	else (WITH_LIBXML2_LIB)
+		find_library(${_LIB}_FOUND ${_LIB})
+	endif (WITH_LIBXML2_LIB)
+	if (NOT ${_LIB}_FOUND)
+		message(FATAL_ERROR "Unable to find lib${_LIB}!")
+	endif (NOT ${_LIB}_FOUND)
+	set(LIBXML2_LIBRARIES ${LIBXML2_LIBRARIES} ${${_LIB}_FOUND})
+endforeach(_LIB)
+message(STATUS "LIBXML2_LIBRARIES = '${LIBXML2_LIBRARIES}'")
+
+
+
 add_executable(adserv
 	adserv.c
 	adserv_db.c
@@ -143,8 +174,9 @@ target_link_libraries(adserv
 	${LIBPQ_LIBRARIES}
 	${LIBMEMCACHED_LIBRARIES}
 	${GLIB2_LIBRARIES}
+	${LIBXML2_LIBRARIES}
 )
 install(PROGRAMS ${CMAKE_CURRENT_BINARY_DIR}/adserv DESTINATION ${BIN_INSTALL_DIR})
 install(PROGRAMS ${CMAKE_CURRENT_SOURCE_DIR}/dbtool.py DESTINATION ${BIN_INSTALL_DIR})
-install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/adserv.conf DESTINATION ${SYSCONF_INSTALL_DIR})
+install(FILES adserv.conf installations.xml DESTINATION ${SYSCONF_INSTALL_DIR})
 

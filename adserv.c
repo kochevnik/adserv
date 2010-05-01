@@ -6,6 +6,9 @@
 #include <sys/queue.h>
 #include <evhttp.h>
 #include <libmemcached/memcached.h>
+#include <libxml/parser.h>
+#include <libxml/tree.h>
+#include <glib.h>
 
 #include <adserv.h>
 #include <adserv_db.h>
@@ -162,7 +165,100 @@ static void handler(struct evhttp_request *req, void *arg)
 	free(reply);
 }
 
-#define DEFAULT_CONFIG "/etc/adserv.conf"
+typedef struct {
+	xmlChar *global_id;
+	xmlChar *local_id;
+	xmlChar *template_url;
+	xmlChar *click_url;
+} installation_t;
+
+static void free_installation(installation_t *p)
+{
+	if (!p)
+		return;
+	xmlFree(p->global_id);
+	xmlFree(p->local_id);
+	xmlFree(p->template_url);
+	xmlFree(p->click_url);
+	free(p);
+}
+
+static inline void ht_free_installation(void *p)
+{
+	free_installation((installation_t*)p);
+}
+
+static GHashTable *installations;
+
+static void ht_print(void *key, void *data, void *unused)
+{
+	installation_t *p = data;
+	log("global_id = '%s', local_id = '%s'\n", p->global_id, p->local_id);
+}
+
+static int get_xml_info(const char *path)
+{
+	xmlDocPtr doc = xmlReadFile(path, NULL, 0);
+	if (!doc) {
+		log("xmlReadFile('%s') failed\n", path);
+		return ADSERV_ERROR;
+	}
+	int ret = ADSERV_ERROR;
+	xmlNodePtr root = xmlDocGetRootElement(doc);
+	if (!root) {
+		log("xmlDocGetRootElement() failed\n");
+		goto out;
+	}
+	installations = g_hash_table_new_full(NULL, NULL, NULL, ht_free_installation);
+	if (!installations) {
+		log("unable to allocate memory\n");
+		goto out;
+	}
+	xmlNodePtr node = root->children;
+	while (node) {
+		if (xmlStrcmp(node->name, (const xmlChar*)"installation") == 0) {
+			installation_t *p = calloc(1, sizeof(installation_t));
+			if (!p) {
+				log("unable to allocate memory\n");
+				goto out;
+			}
+			p->global_id = xmlGetProp(node, (const xmlChar*)"globalId");
+			if (!p->global_id) {
+				log("unable to xmlGetProp('globalId')\n");
+				free_installation(p);
+				goto out;
+			}
+			p->local_id = xmlGetProp(node, (const xmlChar*)"localId");
+			if (!p->local_id) {
+				log("unable to xmlGetProp('localId')\n");
+				free_installation(p);
+				goto out;
+			}
+			p->template_url = xmlGetProp(node, (const xmlChar*)"templateUrl");
+			if (!p->template_url) {
+				log("unable to xmlGetProp('templateUrl')\n");
+				free_installation(p);
+				goto out;
+			}
+			p->click_url = xmlGetProp(node, (const xmlChar*)"clickUrl");
+			if (!p->click_url) {
+				log("unable to xmlGetProp('clickUrl')\n");
+				free_installation(p);
+				goto out;
+			}
+			g_hash_table_insert(installations, p->global_id, p);
+		}
+		node = node->next;
+	}
+	ret = ADSERV_OK;
+	g_hash_table_foreach(installations, ht_print, NULL);
+out:
+	xmlFreeDoc(doc);
+	xmlCleanupParser();
+	return ret;
+}
+
+#define DEFAULT_CONFIG "/etc/adserv/adserv.conf"
 #define OPTSTRING "c:hid:"
 
 static void usage(const char *arg)
@@ -244,6 +340,12 @@ int main(int argc, char **argv)
 		log("unable to connect to memcached at %s:%u\n", memcached_host, memcached_port);
 		goto out_db;
 	}
+
+	req.key = "xml_path";
+	if (adserv_cfg_get(&req) != ADSERV_OK)
+		goto out_db;
+	if (get_xml_info(req.value) != ADSERV_OK)
+		goto out_db;
 
 	req.key = "listen_address";
 	if (adserv_cfg_get(&req) != ADSERV_OK)
