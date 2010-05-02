@@ -16,6 +16,112 @@
 
 memcached_st *cache_client;
 
+typedef struct {
+	xmlChar *global_id;
+	xmlChar *local_id;
+	xmlChar *template_url;
+	xmlChar *click_url;
+} installation_t;
+
+static void free_installation(installation_t *p)
+{
+	if (!p)
+		return;
+	xmlFree(p->global_id);
+	xmlFree(p->local_id);
+	xmlFree(p->template_url);
+	xmlFree(p->click_url);
+	free(p);
+}
+
+static inline void ht_free_installation(void *p)
+{
+	free_installation((installation_t*)p);
+}
+
+static GHashTable *installations;
+
+static void ht_print(void *key, void *data, void *unused)
+{
+	installation_t *p = data;
+	log("global_id = '%s', local_id = '%s'\n", p->global_id, p->local_id);
+}
+
+static char* get_local_id(const char *global_id)
+{
+	installation_t *p = g_hash_table_lookup(installations, global_id);
+	if (!p) {
+		dbg("no value for key '%s'\n", global_id);
+		return NULL;
+	}
+	dbg("global_id '%s', local_id '%s'\n", global_id, p->local_id);
+	return (char*)(p->local_id);
+}
+
+static int get_xml_info(const char *path)
+{
+	xmlDocPtr doc = xmlReadFile(path, NULL, 0);
+	if (!doc) {
+		log("xmlReadFile('%s') failed\n", path);
+		return ADSERV_ERROR;
+	}
+	int ret = ADSERV_ERROR;
+	xmlNodePtr root = xmlDocGetRootElement(doc);
+	if (!root) {
+		log("xmlDocGetRootElement() failed\n");
+		goto out;
+	}
+	installations = g_hash_table_new_full(g_str_hash, g_str_equal, NULL, ht_free_installation);
+	if (!installations) {
+		log("unable to allocate memory\n");
+		goto out;
+	}
+	xmlNodePtr node = root->children;
+	while (node) {
+		if (xmlStrcmp(node->name, (const xmlChar*)"installation") == 0) {
+			installation_t *p = calloc(1, sizeof(installation_t));
+			if (!p) {
+				log("unable to allocate memory\n");
+				goto out;
+			}
+			p->global_id = xmlGetProp(node, (const xmlChar*)"globalId");
+			if (!p->global_id) {
+				log("unable to xmlGetProp('globalId')\n");
+				free_installation(p);
+				goto out;
+			}
+			p->local_id = xmlGetProp(node, (const xmlChar*)"localId");
+			if (!p->local_id) {
+				log("unable to xmlGetProp('localId')\n");
+				free_installation(p);
+				goto out;
+			}
+			p->template_url = xmlGetProp(node, (const xmlChar*)"templateUrl");
+			if (!p->template_url) {
+				log("unable to xmlGetProp('templateUrl')\n");
+				free_installation(p);
+				goto out;
+			}
+			p->click_url = xmlGetProp(node, (const xmlChar*)"clickUrl");
+			if (!p->click_url) {
+				log("unable to xmlGetProp('clickUrl')\n");
+				free_installation(p);
+				goto out;
+			}
+			g_hash_table_insert(installations, p->global_id, p);
+		}
+		node = node->next;
+	}
+	ret = ADSERV_OK;
+
+	g_hash_table_foreach(installations, ht_print, NULL);
+	//get_local_id("1");
+out:
+	xmlFreeDoc(doc);
+	xmlCleanupParser();
+	return ret;
+}
+
 #define ADSERV_GET_TEMPLATE_KEY "template:%s:%s:%s"
 static char* get_template(adserv_params_t *params, size_t *reply_size)
 {
@@ -123,6 +229,7 @@ static void handler(struct evhttp_request *req, void *arg)
 			params.inst_id.data = itr->value; // warning: storage lifetime!
 			params.inst_id.size = strlen(itr->value) + 1;
 		}
+		/*
 		if (strcmp("iframe", itr->key) == 0) {
 			params.iframe.data = itr->value; // warning: storage lifetime!
 			params.iframe.size = strlen(itr->value) + 1;
@@ -131,6 +238,7 @@ static void handler(struct evhttp_request *req, void *arg)
 			params.banner_id.data = itr->value; // warning: storage lifetime!
 			params.banner_id.size = strlen(itr->value) + 1;
 		}
+		*/
 	}
 
 	char *reply = NULL;
@@ -163,99 +271,6 @@ static void handler(struct evhttp_request *req, void *arg)
 	}
 
 	free(reply);
-}
-
-typedef struct {
-	xmlChar *global_id;
-	xmlChar *local_id;
-	xmlChar *template_url;
-	xmlChar *click_url;
-} installation_t;
-
-static void free_installation(installation_t *p)
-{
-	if (!p)
-		return;
-	xmlFree(p->global_id);
-	xmlFree(p->local_id);
-	xmlFree(p->template_url);
-	xmlFree(p->click_url);
-	free(p);
-}
-
-static inline void ht_free_installation(void *p)
-{
-	free_installation((installation_t*)p);
-}
-
-static GHashTable *installations;
-
-static void ht_print(void *key, void *data, void *unused)
-{
-	installation_t *p = data;
-	log("global_id = '%s', local_id = '%s'\n", p->global_id, p->local_id);
-}
-
-static int get_xml_info(const char *path)
-{
-	xmlDocPtr doc = xmlReadFile(path, NULL, 0);
-	if (!doc) {
-		log("xmlReadFile('%s') failed\n", path);
-		return ADSERV_ERROR;
-	}
-	int ret = ADSERV_ERROR;
-	xmlNodePtr root = xmlDocGetRootElement(doc);
-	if (!root) {
-		log("xmlDocGetRootElement() failed\n");
-		goto out;
-	}
-	installations = g_hash_table_new_full(NULL, NULL, NULL, ht_free_installation);
-	if (!installations) {
-		log("unable to allocate memory\n");
-		goto out;
-	}
-	xmlNodePtr node = root->children;
-	while (node) {
-		if (xmlStrcmp(node->name, (const xmlChar*)"installation") == 0) {
-			installation_t *p = calloc(1, sizeof(installation_t));
-			if (!p) {
-				log("unable to allocate memory\n");
-				goto out;
-			}
-			p->global_id = xmlGetProp(node, (const xmlChar*)"globalId");
-			if (!p->global_id) {
-				log("unable to xmlGetProp('globalId')\n");
-				free_installation(p);
-				goto out;
-			}
-			p->local_id = xmlGetProp(node, (const xmlChar*)"localId");
-			if (!p->local_id) {
-				log("unable to xmlGetProp('localId')\n");
-				free_installation(p);
-				goto out;
-			}
-			p->template_url = xmlGetProp(node, (const xmlChar*)"templateUrl");
-			if (!p->template_url) {
-				log("unable to xmlGetProp('templateUrl')\n");
-				free_installation(p);
-				goto out;
-			}
-			p->click_url = xmlGetProp(node, (const xmlChar*)"clickUrl");
-			if (!p->click_url) {
-				log("unable to xmlGetProp('clickUrl')\n");
-				free_installation(p);
-				goto out;
-			}
-			g_hash_table_insert(installations, p->global_id, p);
-		}
-		node = node->next;
-	}
-	ret = ADSERV_OK;
-	g_hash_table_foreach(installations, ht_print, NULL);
-out:
-	xmlFreeDoc(doc);
-	xmlCleanupParser();
-	return ret;
 }
 
 #define DEFAULT_CONFIG "/etc/adserv/adserv.conf"
